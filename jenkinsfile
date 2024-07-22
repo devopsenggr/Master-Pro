@@ -1,0 +1,101 @@
+pipeline{
+    agent any
+    tools{
+          maven 'maven3'
+          jdk 'jdk17'
+          
+            }
+    environment {
+        SCANNER_HOME=tool 'sonar-scanner'
+        
+    }
+    stages {
+        stage('clean workspace'){
+            steps{
+                cleanWs()
+            }
+        }
+        stage('Checkout from Git'){
+            steps{
+                git branch: 'main', url: 'https://github.com/devopsenggr/Master-Pro.git'
+            }
+        }
+        stage('Compile') {
+            steps {
+                sh "mvn compile"
+            }
+        }
+        stage('Unit Test') {
+            steps {
+                sh "mvn test"
+            }
+        }
+        stage('TRIVY FS SCAN') {
+            steps {
+                sh "trivy fs --format table -o fs.html . "
+            }
+        }
+        stage("Sonarqube Analysis "){
+            steps{
+                withSonarQubeEnv('sonar-server') {
+                    sh ''' $SCANNER_HOME/bin/sonar-scanner -Dsonar.projectName=masterPro \
+                    -Dsonar.projectKey=masterPro \
+                    -Dsonar.java.binaries=target '''
+                }
+            }
+        }
+        
+        stage('Build') {
+            steps {
+                sh "mvn package"
+            }
+        }
+        
+        stage("publish artifact"){
+            steps{
+              withMaven(globalMavenSettingsConfig: 'maven-settings', jdk: 'jdk17', maven: 'maven3', mavenSettingsConfig: '', traceability: true) {
+    sh 'mvn deploy'
+}
+            }
+        }
+        stage("docker build n tag")
+        {
+            steps{
+                script {
+                withDockerRegistry(credentialsId: 'docker') {
+                         sh 'docker build -t masterpro .'
+                         sh "docker tag masterpro awsd43/masterpro:latest "
+                        
+                        }
+                        }
+            }
+        }
+       stage('TRIVY image SCAN') {
+            steps {
+                sh "trivy image --format table -o image.html awsd43/masterpro:latest"
+            }
+        }
+        
+       stage("docker push")
+        {
+            steps{
+                script {
+                withDockerRegistry(credentialsId: 'docker') {
+                         sh "docker push awsd43/masterpro:latest "
+                                                            }
+                        }
+                }
+        } 
+    }//pipelin closing
+    post {
+     always {
+        emailext attachLog: true,
+            subject: "'${currentBuild.result}'",
+            body: "Project: ${env.JOB_NAME}<br/>" +
+                "Build Number: ${env.BUILD_NUMBER}<br/>" +
+                "URL: ${env.BUILD_URL}<br/>",
+            to: 'awstraining42@gmail.com',                                
+            attachmentsPattern: 'trivyfs.txt,trivyimage.txt'
+        }
+    }
+}
