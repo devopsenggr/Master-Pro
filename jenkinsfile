@@ -84,9 +84,29 @@ pipeline{
                          sh "docker push awsd43/masterpro:latest "
                                                             }
                         }
-                }
+            }
         } 
-    }//pipelin closing
+        stage("k8 deploy")
+        {
+            steps{
+                withKubeConfig(caCertificate: '', clusterName: 'master', contextName: '', credentialsId: 'k8-token', namespace: 'webapps', restrictKubeConfigAccess: false, serverUrl: 'https://7ECA38BE295C65025818E62D75DA3ED8.gr7.ap-south-1.eks.amazonaws.com') {
+            sh 'kubectl apply -f deployment-service.yml'
+            sleep 30
+                }
+            }
+        } 
+        stage("verify k8 deployment")
+        {
+            steps{
+                withKubeConfig(caCertificate: '', clusterName: 'master', contextName: '', credentialsId: 'k8-token', namespace: 'webapps', restrictKubeConfigAccess: false, serverUrl: 'https://7ECA38BE295C65025818E62D75DA3ED8.gr7.ap-south-1.eks.amazonaws.com') {
+            sh 'kubectl get pods -n webapps'
+            sh 'kubectl get svc -n webapps'
+            sleep 30
+                }
+            }
+        }         
+
+    }
     post {
      always {
         emailext attachLog: true,
